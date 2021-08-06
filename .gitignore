@@ -1,3 +1,8 @@
 ca.cert
 ca.key
 admin.out
+.bash_history
+.conjurrc
+.netrc
+conjur-default.pem
+.cache
