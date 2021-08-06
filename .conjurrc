@@ -1,0 +1,5 @@
+---
+account: default
+plugins: []
+appliance_url: https://conjur.demo.com:9443
+cert_file: "/root/conjur-default.pem"

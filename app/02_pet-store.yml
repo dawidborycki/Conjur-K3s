@@ -1,0 +1,106 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: testapp-secure-sa
+  namespace: testapp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: testapp-secure
+  namespace: testapp
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: testapp-secure
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: "testapp-secure"
+  name: "testapp-secure"
+  namespace: "testapp"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "testapp-secure"
+  template:
+    metadata:
+      labels:
+        app: "testapp-secure"
+    spec:
+      serviceAccountName: "testapp-secure-sa"
+      hostAliases:
+      - ip: "10.105.68.126"
+        hostnames:
+        - "conjur.demo.com"
+
+      containers:
+      - image: cyberark/demo-app
+        imagePullPolicy: IfNotPresent
+        name: testapp-secure
+        ports:
+        - containerPort: 8080
+        env:
+          - name: DB_URL
+            value: postgresql://localhost:5432/postgres
+          - name: DB_USERNAME
+            value: dummy
+          - name: DB_PASSWORD
+            value: dummy
+          - name: DB_PLATFORM
+            value: postgres
+      - name: secretless
+        image: cyberark/secretless-broker:latest
+        imagePullPolicy: Always
+        args: ["-f", "/etc/secretless/secretless.yml"]
+        env:
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+
+          - name: CONJUR_APPLIANCE_URL
+            value: "https://conjur-cluster-conjur-oss.conjur-server.svc.cluster.local"
+          - name: CONJUR_AUTHN_URL
+            value: "https://conjur-cluster-conjur-oss.conjur-server.svc.cluster.local/authn-k8s/dev"
+          - name: CONJUR_ACCOUNT
+            value: "default"
+          - name: CONJUR_AUTHN_LOGIN
+            value: "host/conjur/authn-k8s/dev/apps/service-account-based-app"
+          - name: CONJUR_SSL_CERTIFICATE
+            valueFrom:
+              configMapKeyRef:
+                name: conjur-cert
+                key: ssl-certificate
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5335
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 60
+        volumeMounts:
+          - mountPath: /etc/secretless
+            name: config
+            readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: secretless-config
+            defaultMode: 420
